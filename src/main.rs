@@ -1,18 +1,27 @@
+use desktop::DesktopEntries;
+use freedesktop_entry_parser::parse_entry;
+use fuzzy_matcher::{clangd::fuzzy_match, skim::SkimMatcherV2, FuzzyMatcher};
 use pollster::block_on;
-use std::{num::NonZeroU32, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashSet},
+    env,
+    ffi::OsStr,
+    fs,
+    hash::Hash,
+    path::Path,
+    process::Command,
+    sync::Arc,
+};
+use tracing_subscriber::fmt::format;
 use wgpu::{
     util::{backend_bits_from_env, initialize_adapter_from_env_or_default},
-    Adapter, Backends, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BindingResource, BindingType, BlendComponent, BlendState, BufferUsages,
-    Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, CompositeAlphaMode,
-    ComputePassDescriptor, ComputePipelineDescriptor, Device, DeviceDescriptor, Extent3d, Features,
-    FragmentState, FrontFace, ImageCopyTexture, ImageCopyTextureBase, Instance, Limits, LoadOp,
-    MultisampleState, Operations, Origin3d, PipelineLayoutDescriptor, PolygonMode, PresentMode,
-    PrimitiveState, PrimitiveTopology, PushConstantRange, RenderPass, RenderPassColorAttachment,
-    RenderPassDescriptor, RenderPipelineDescriptor, SamplerBindingType, ShaderModuleDescriptor,
-    ShaderSource, ShaderStages, StorageTextureAccess, Surface, SurfaceConfiguration, SurfaceError,
-    SurfaceTexture, TextureAspect, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureSampleType, TextureUsages, TextureViewDescriptor, TextureViewDimension, VertexState,
+    Adapter, Backends, BindGroupLayoutDescriptor, BlendState, Color, ColorTargetState, ColorWrites,
+    CommandEncoderDescriptor, CompositeAlphaMode, Device, DeviceDescriptor, Features,
+    FragmentState, FrontFace, Instance, Limits, LoadOp, MultisampleState, Operations,
+    PipelineLayoutDescriptor, PolygonMode, PresentMode, PrimitiveState, PrimitiveTopology,
+    PushConstantRange, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
+    ShaderModuleDescriptor, ShaderSource, ShaderStages, Surface, SurfaceConfiguration,
+    SurfaceError, SurfaceTexture, TextureFormat, TextureUsages, TextureViewDescriptor, VertexState,
 };
 use winit::{
     dpi::{LogicalPosition, PhysicalSize},
@@ -23,8 +32,19 @@ use winit::{
 
 //
 
+mod desktop;
+
+//
+
 fn main() {
     tracing_subscriber::fmt::init();
+
+    let pattern = std::io::stdin().lines().next().unwrap().unwrap();
+    let entries = DesktopEntries::new();
+    if let Some((_, entry)) = entries.matches(&pattern).pop_last() {
+        entry.launch()
+    }
+    return;
 
     let events = EventLoop::new();
     let window = Arc::new(
@@ -98,7 +118,7 @@ fn main() {
         label: None,
         source: ShaderSource::Wgsl(include_str!("blit.wgsl").into()),
     });
-    let blit_group = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+    let _blit_group = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
         label: None,
         entries: &[
             /* BindGroupLayoutEntry {
@@ -257,7 +277,7 @@ fn s_config(
     };
 
     surface.configure(
-        &device,
+        device,
         &SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT, /* | TextureUsages::COPY_DST */
             format,
@@ -292,7 +312,7 @@ fn acquire(
             }
             Err(err) => {
                 tracing::debug!("{err}");
-                s_config(&surface, &window, &device, adapter, None);
+                s_config(surface, window, device, adapter, None);
             }
         }
     }

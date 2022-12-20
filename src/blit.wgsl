@@ -11,8 +11,19 @@ fn vs_main(@builtin(vertex_index) id: u32) -> @builtin(position) vec4<f32> {
 
 @fragment
 fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
-    if pos.x > 20.0 && pos.x < pc.res.x - 20.0 && pos.y > 20.0 && pos.y < pc.res.y - 20.0 {
-       discard;
+    var uv: vec2<f32> = pos.xy - pc.res * 0.5;
+    var color: vec4<f32> = vec4<f32>(pos.xy / pc.res, 0.0, 1.0);
+
+    let border_radius: f32 = 8.0;
+
+    var corner: vec2<f32> = abs(uv) - vec2<f32>(pc.res * 0.5 - border_radius);
+    if all(corner > vec2<f32>(0.0)) {
+        var edge = corner.x * corner.x + corner.y * corner.y - border_radius * border_radius;
+        color *= smoothstep(0.0, -border_radius * 2.0, edge);
+        if edge > 0.0 {
+            discard;
+        }
     }
-    return vec4<f32>(pos.xy / pc.res, 0.0, 1.0);
+
+    return color;
 }
